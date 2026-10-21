@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="NEON AI">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6ea6ff"/>
+      <stop offset="0.55" stop-color="#4f8cff"/>
+      <stop offset="1" stop-color="#2f6bdd"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.35" r="0.7">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="#070b15"/>
+  <rect x="18" y="18" width="476" height="476" rx="102" fill="url(#g)"/>
+  <rect x="18" y="18" width="476" height="476" rx="102" fill="url(#glow)"/>
+  <path d="M164 356V156h34l116 140V156h34v200h-34L198 216v140h-34Z" fill="#ffffff"/>
+  <circle cx="356" cy="362" r="18" fill="#dbeafe"/>
+</svg>

@@ -1,0 +1,21 @@
+{
+  "name": "NEON AI · Ollama Chat",
+  "short_name": "NEON AI",
+  "description": "Antarmuka chat lokal yang cepat, rapi, dan ramah mobile untuk Ollama.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#060913",
+  "theme_color": "#060913",
+  "lang": "id",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/static/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
