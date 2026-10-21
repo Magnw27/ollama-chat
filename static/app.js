@@ -5,6 +5,10 @@ const STORAGE_SETTINGS = 'neon.settings.v6';
 
 const PREFERRED_MODEL = 'gemma4:31b-cloud';
 
+// Label tampilan saja — model yang dipakai Ollama tetap nama aslinya.
+const MODEL_LABELS = { 'gemma4:31b-cloud': 'mdripz-31b-win' };
+const modelLabel = (name) => (name && MODEL_LABELS[name]) || name || '';
+
 const DEFAULT_SETTINGS = {
   model: PREFERRED_MODEL,
   temperature: 0.6,
@@ -507,7 +511,7 @@ function Sidebar({
           {!collapsed && (
             <div className="brand-text hide-collapsed">
               <div className="brand-name">NEON <span>AI</span></div>
-              <div className="brand-sub">ollama · v6</div>
+              <div className="brand-sub">ollama · v7</div>
             </div>
           )}
         </div>
@@ -724,7 +728,7 @@ function Message({
         <div className="msg-head">
           <span className="msg-name">NEON AI</span>
           <span className="msg-time">{fmtTime(message.ts)}</span>
-          {message.model && <span className="badge subtle">{message.model}</span>}
+          {message.model && <span className="badge subtle">{modelLabel(message.model)}</span>}
           {message.stopped && <span className="badge warn">dihentikan</span>}
         </div>
 
@@ -814,9 +818,9 @@ function Composer({ value, onChange, onSend, onStop, isStreaming, model, offline
             aria-label="Pesan untuk NEON AI"
           />
           <div className="composer-bar">
-            <span className="composer-model" title={model || 'Belum ada model'}>
+            <span className="composer-model" title={modelLabel(model) || 'Belum ada model'}>
               <Icon name="cpu" size={13} />
-              <span>{model || 'belum ada model'}</span>
+              <span>{modelLabel(model) || 'belum ada model'}</span>
             </span>
             <span className="composer-hint">
               {offline ? 'Ollama offline · periksa koneksi' : 'Enter kirim · Shift+Enter baris baru'}
@@ -934,7 +938,7 @@ function SettingsPanel({
             {!models.length && <option value="">Tidak ada model</option>}
             {models.map((model) => (
               <option key={model.name} value={model.name}>
-                {model.name}{model.parameter_size ? ` · ${model.parameter_size}` : ''}
+                {modelLabel(model.name)}{model.parameter_size ? ` · ${model.parameter_size}` : ''}
               </option>
             ))}
           </select>
@@ -1199,7 +1203,7 @@ function ModelManager({ models, online, onClose, onRefresh, notify }) {
             {models.map((model) => (
               <div className="model-row" key={model.name}>
                 <div className="model-info">
-                  <div className="model-name">{model.name}</div>
+                  <div className="model-name">{modelLabel(model.name)}</div>
                   <div className="model-meta">
                     {[model.size_human, model.parameter_size, model.quantization].filter(Boolean).join(' · ') || 'ukuran tidak diketahui'}
                   </div>
@@ -1847,7 +1851,7 @@ function App() {
             </span>
             <button className="model-pill" onClick={() => setModelsOpen(true)} title="Kelola model">
               <Icon name="cpu" size={15} />
-              <span className="model-pill-text">{settings.model || 'Pilih model'}</span>
+              <span className="model-pill-text">{settings.model ? modelLabel(settings.model) : 'Pilih model'}</span>
               <Icon name="chevronDown" size={13} />
             </button>
             <button
