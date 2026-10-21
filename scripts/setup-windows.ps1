@@ -1,4 +1,4 @@
-<#
+﻿<#
     Bootstrap NEON AI di Windows/RDP yang baru di-reset.
 
     Yang dilakukan:
@@ -29,7 +29,7 @@ function Write-Step($text) { Write-Host "`n== $text" -ForegroundColor Cyan }
 function Write-Ok($text)   { Write-Host "   OK: $text" -ForegroundColor Green }
 function Write-Warn2($text) { Write-Host "   !  $text" -ForegroundColor Yellow }
 
-Write-Host "NEON AI setup — $root" -ForegroundColor White
+Write-Host "NEON AI setup - $root" -ForegroundColor White
 
 # --- 1. .env ---------------------------------------------------------------
 Write-Step "Konfigurasi .env"

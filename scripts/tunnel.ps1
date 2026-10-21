@@ -1,4 +1,4 @@
-<#
+﻿<#
     Buka aplikasi ke internet lewat Cloudflare Quick Tunnel
     (URL acak *.trycloudflare.com, tanpa akun).
 

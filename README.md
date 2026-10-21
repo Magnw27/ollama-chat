@@ -49,9 +49,24 @@ python main.py
 
 Buka **http://127.0.0.1:8000**.
 
-## Setup cepat setelah reset RDP (Windows)
+## Setup setelah reset RDP (Windows)
 
-Sekali jalan — venv + dependensi, install Ollama bila hilang, `ollama serve`, dan unduh model default:
+### Cara 1 — otomatis penuh (RDP benar-benar kosong)
+
+Satu perintah; script memasang **Git + Python + Ollama**, clone repo, setup venv, pull model, lalu membuka server dan tunnel:
+
+```powershell
+$s = "$env:TEMP\neon-bootstrap.ps1"
+irm https://raw.githubusercontent.com/Magnw27/ollama-chat/main/scripts/bootstrap-windows.ps1 -OutFile $s
+powershell -ExecutionPolicy Bypass -File $s
+```
+
+Opsi: `-InstallDir C:\ai-ollama-chat`, `-Model qwen3.8:27b`, `-SkipTunnel`, `-SkipRun`, `-SkipModelPull`.
+
+### Cara 2 — manual (Git & Python sudah terpasang)
+
+1. Install [Git](https://git-scm.com/download/win) dan [Python 3.10+](https://www.python.org/downloads/windows/) (centang *Add python.exe to PATH*). Ollama tidak perlu manual — script yang memasangnya.
+2. Clone dan setup:
 
 ```powershell
 git clone https://github.com/Magnw27/ollama-chat.git
@@ -60,7 +75,7 @@ powershell -ExecutionPolicy Bypass -File scripts\setup-windows.ps1
 powershell -ExecutionPolicy Bypass -File scripts\run-windows.ps1
 ```
 
-Atau klik dua kali `start.bat`. Untuk membuka ke internet: `tunnel.bat` (Cloudflare Quick Tunnel; cloudflared diunduh otomatis ke `tools/`).
+3. Atau klik dua kali `start.bat`. Untuk membuka ke internet: `tunnel.bat` (Cloudflare Quick Tunnel; cloudflared diunduh otomatis ke `tools/`).
 
 Linux/macOS: `bash scripts/setup-linux.sh`, lalu `source .venv/bin/activate && python main.py`.
 
@@ -100,7 +115,8 @@ static/app.js            # React (Babel standalone)
 static/styles.css        # desain & responsif
 static/manifest.webmanifest
 static/icon.svg
-scripts/setup-windows.ps1  # bootstrap Windows/RDP
+scripts/bootstrap-windows.ps1  # install Git+Python+Ollama+clone+setup
+scripts/setup-windows.ps1      # venv + Ollama + model default
 scripts/run-windows.ps1    # jalankan server
 scripts/tunnel.ps1         # Cloudflare Quick Tunnel
 scripts/setup-linux.sh     # bootstrap Linux/macOS

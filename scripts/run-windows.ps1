@@ -1,4 +1,4 @@
-<#
+﻿<#
     Jalankan NEON AI memakai virtualenv project.
 
     Contoh:
