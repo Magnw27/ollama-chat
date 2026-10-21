@@ -3,11 +3,6 @@ const { useState, useEffect, useRef, useMemo, useCallback } = React;
 const STORAGE_CHATS = 'neon.chats.v6';
 const STORAGE_SETTINGS = 'neon.settings.v6';
 
-const DEFAULT_SYSTEM_PROMPT =
-  'You are NEON AI, a precise and helpful local assistant. ' +
-  'Reply in the same language the user writes in. Use Markdown for structure, ' +
-  'always tag code fences with a language, and keep answers focused.';
-
 const PREFERRED_MODEL = 'gemma4:31b-cloud';
 
 const DEFAULT_SETTINGS = {
@@ -16,9 +11,8 @@ const DEFAULT_SETTINGS = {
   top_p: 0.9,
   top_k: 40,
   num_predict: 2048,
-  systemPrompt: DEFAULT_SYSTEM_PROMPT,
   think: false,
-  keepAlive: '5m',
+  keepAlive: '30m',
   accent: 'blue',
 };
 
@@ -1030,19 +1024,6 @@ function SettingsPanel({
         <hr className="divider" />
 
         <div className="field">
-          <div className="field-label"><span>System prompt</span></div>
-          <textarea
-            className="textarea"
-            value={settings.systemPrompt}
-            onChange={(event) => onChange({ systemPrompt: event.target.value })}
-          />
-          <button className="btn btn-sm" type="button" onClick={() => onChange({ systemPrompt: DEFAULT_SYSTEM_PROMPT })}>
-            <Icon name="refresh" size={13} />
-            Kembalikan default
-          </button>
-        </div>
-
-        <div className="field">
           <div className="field-label"><span>Warna aksen</span></div>
           <div className="accent-list">
             {ACCENTS.map((accent) => (
@@ -1484,7 +1465,6 @@ function App() {
         body: JSON.stringify({
           model: modelName,
           messages: apiMessages,
-          system_prompt: settings.systemPrompt,
           options: {
             temperature: Number(settings.temperature),
             top_p: Number(settings.top_p),

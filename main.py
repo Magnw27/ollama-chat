@@ -7,6 +7,8 @@ import contextlib
 import json
 import logging
 import os
+import platform
+import socket
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -23,22 +25,52 @@ from pydantic import BaseModel, Field
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 
+
+def load_dotenv(path: Path) -> None:
+    """Minimal .env loader so a fresh clone only needs a few files."""
+    if not path.is_file():
+        return
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key:
+            os.environ.setdefault(key, value.strip().strip("'\""))
+
+
+def env_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+load_dotenv(BASE_DIR / ".env")
+
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
 DEFAULT_MODEL = os.getenv("OLLAMA_DEFAULT_MODEL", "gemma4:31b-cloud").strip()
 REQUEST_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "600"))
 HOST = os.getenv("HOST", "127.0.0.1")
 PORT = int(os.getenv("PORT", "8000"))
+DEFAULT_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "30m").strip() or "30m"
+AUTO_PULL = env_flag("OLLAMA_AUTO_PULL", False)
 ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.getenv("ALLOWED_ORIGINS", "*").split(",")
     if origin.strip()
 ]
 
-DEFAULT_SYSTEM_PROMPT = (
-    "You are NEON AI, a precise and helpful local assistant. "
-    "Reply in the same language the user writes in. Use Markdown for structure, "
-    "always tag code fences with a language, and keep answers focused."
-)
+# Persona inti aplikasi. Dikelola penuh oleh server — tidak bisa diubah dari UI.
+DEFAULT_SYSTEM_PROMPT = os.getenv(
+    "OLLAMA_SYSTEM_PROMPT",
+    "Anda adalah model AI bernama mdripz-31b-win, assistant AI serbaguna, cepat, dan cerdas.",
+).strip()
 
 SSE_DONE = "data: [DONE]\n\n"
 
@@ -50,6 +82,7 @@ log = logging.getLogger("neon")
 
 http_client: Optional[httpx.AsyncClient] = None
 models_cache: dict[str, Any] = {"fetched_at": 0.0, "models": []}
+STARTED_AT = time.time()
 
 
 @asynccontextmanager
@@ -61,9 +94,17 @@ async def lifespan(_: FastAPI):
         limits=httpx.Limits(max_connections=32, max_keepalive_connections=8),
     )
     log.info("Ollama endpoint: %s", OLLAMA_BASE_URL)
+    log.info("Persona: %s", DEFAULT_SYSTEM_PROMPT)
+    auto_pull_task: Optional[asyncio.Task[None]] = None
+    if AUTO_PULL and DEFAULT_MODEL:
+        auto_pull_task = asyncio.create_task(ensure_default_model())
     try:
         yield
     finally:
+        if auto_pull_task is not None:
+            auto_pull_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await auto_pull_task
         await http_client.aclose()
         http_client = None
 
@@ -71,7 +112,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title="NEON AI",
     description="Local Ollama chat interface.",
-    version="6.0.0",
+    version="7.0.0",
     lifespan=lifespan,
 )
 
@@ -81,6 +122,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def timing_middleware(request: Request, call_next):
+    started = time.perf_counter()
+    response = await call_next(request)
+    elapsed_ms = (time.perf_counter() - started) * 1000
+    response.headers["X-Process-Time-ms"] = f"{elapsed_ms:.0f}"
+    if request.url.path.startswith("/api/"):
+        log.info(
+            "%s %s -> %s (%.0f ms)",
+            request.method,
+            request.url.path,
+            response.status_code,
+            elapsed_ms,
+        )
+    return response
 
 
 def get_client() -> httpx.AsyncClient:
@@ -128,6 +186,43 @@ async def fetch_models(force: bool = False) -> list[dict[str, Any]]:
     return models
 
 
+async def ensure_default_model() -> None:
+    """Pull the default model on startup when OLLAMA_AUTO_PULL=1."""
+    try:
+        models = await fetch_models(force=True)
+        names = {item["name"] for item in models}
+        if DEFAULT_MODEL in names or f"{DEFAULT_MODEL}:latest" in names:
+            return
+        log.info("Model default %s belum ada — mengunduh otomatis...", DEFAULT_MODEL)
+        last_status = None
+        async with get_client().stream(
+            "POST",
+            "/api/pull",
+            json={"model": DEFAULT_MODEL, "stream": True},
+            timeout=httpx.Timeout(None, connect=15.0),
+        ) as response:
+            async for line in response.aiter_lines():
+                if not line.strip():
+                    continue
+                try:
+                    chunk = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if chunk.get("error"):
+                    log.error("Auto-pull gagal: %s", chunk["error"])
+                    return
+                status = chunk.get("status")
+                if status and status != last_status:
+                    last_status = status
+                    log.info("Auto-pull: %s", status)
+        models_cache["fetched_at"] = 0.0
+        log.info("Model default %s siap dipakai.", DEFAULT_MODEL)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        log.warning("Auto-pull model default gagal: %s", exc)
+
+
 async def resolve_model(requested: Optional[str]) -> str:
     if requested and requested.strip():
         return requested.strip()
@@ -156,7 +251,6 @@ class Message(BaseModel):
 class ChatRequest(BaseModel):
     messages: list[Message] = Field(default_factory=list)
     model: Optional[str] = None
-    system_prompt: Optional[str] = None
     options: Optional[dict[str, Any]] = None
     think: Optional[bool] = None
     keep_alive: Optional[str | int] = None
@@ -166,24 +260,28 @@ class PullRequest(BaseModel):
     name: str = Field(min_length=1, max_length=200)
 
 
+class WarmupRequest(BaseModel):
+    model: Optional[str] = None
+
+
 def build_payload(payload: ChatRequest, model: str, stream: bool) -> dict[str, Any]:
+    # Persona server selalu menjadi system message pertama; system message dari
+    # klien diabaikan agar prompt tidak bisa diubah lewat UI/API.
     messages: list[dict[str, Any]] = []
-    system_prompt = (
-        payload.system_prompt
-        if payload.system_prompt is not None
-        else DEFAULT_SYSTEM_PROMPT
+    if DEFAULT_SYSTEM_PROMPT:
+        messages.append({"role": "system", "content": DEFAULT_SYSTEM_PROMPT})
+    messages.extend(
+        message.model_dump() for message in payload.messages if message.role != "system"
     )
-    if system_prompt.strip() and not any(m.role == "system" for m in payload.messages):
-        messages.append({"role": "system", "content": system_prompt})
-    messages.extend(message.model_dump() for message in payload.messages)
 
     body: dict[str, Any] = {"model": model, "messages": messages, "stream": stream}
     if payload.options:
         body["options"] = payload.options
     if payload.think is not None:
         body["think"] = payload.think
-    if payload.keep_alive is not None:
-        body["keep_alive"] = payload.keep_alive
+    body["keep_alive"] = (
+        payload.keep_alive if payload.keep_alive is not None else DEFAULT_KEEP_ALIVE
+    )
     return body
 
 
@@ -257,6 +355,60 @@ async def health() -> dict[str, Any]:
         "base_url": OLLAMA_BASE_URL,
         "default_model": DEFAULT_MODEL or None,
         "time": int(time.time()),
+    }
+
+
+@app.get("/api/system")
+async def system_info() -> dict[str, Any]:
+    online = False
+    version = None
+    try:
+        response = await get_client().get("/api/version", timeout=3.0)
+        response.raise_for_status()
+        version = response.json().get("version")
+        online = True
+    except Exception:
+        version = None
+    return {
+        "app": "NEON AI",
+        "version": app.version,
+        "python": platform.python_version(),
+        "platform": platform.platform(),
+        "hostname": socket.gethostname(),
+        "uptime_seconds": round(time.time() - STARTED_AT),
+        "ollama_online": online,
+        "ollama_version": version,
+        "ollama_base_url": OLLAMA_BASE_URL,
+        "default_model": DEFAULT_MODEL or None,
+        "default_keep_alive": DEFAULT_KEEP_ALIVE,
+        "auto_pull": AUTO_PULL,
+        "persona": DEFAULT_SYSTEM_PROMPT,
+        "time": int(time.time()),
+    }
+
+
+@app.post("/api/warmup")
+async def warmup(payload: WarmupRequest) -> dict[str, Any]:
+    """Muat model ke memori lebih awal supaya balasan pertama tidak lambat."""
+    model = await resolve_model(payload.model)
+    started = time.perf_counter()
+    try:
+        response = await get_client().post(
+            "/api/generate",
+            json={"model": model, "prompt": "", "keep_alive": DEFAULT_KEEP_ALIVE},
+            timeout=httpx.Timeout(REQUEST_TIMEOUT, connect=10.0),
+        )
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.text[:400]
+        raise HTTPException(status_code=502, detail=f"Ollama error: {detail}") from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {
+        "ok": True,
+        "model": model,
+        "keep_alive": DEFAULT_KEEP_ALIVE,
+        "load_ms": round((time.perf_counter() - started) * 1000),
     }
 
 

@@ -15,8 +15,9 @@ Antarmuka chat lokal untuk [Ollama](https://ollama.com) — cepat, rapi, dan dio
 - **Riwayat lokal**: cari, ganti nama, hapus, ekspor Markdown/JSON, impor JSON.
 - **Ramah mobile**: sidebar drawer, panel bottom-sheet, target sentuh besar, safe-area iOS, anti-zoom input.
 - **PWA-ready**: manifest + ikon, bisa dipasang ke home screen.
-- **Tema aksen** (biru, ungu, emerald, amber, rose) dan system prompt yang bisa diubah.
-- **Backend tahan banting**: health check, auto-pilih model, pembatalan generation saat klien putus, timeout & error yang jelas.
+- **Tema aksen** (biru, ungu, emerald, amber, rose).
+- **Persona tetap**: prompt sistem `mdripz-31b-win` dikelola backend — tidak bisa diubah dari UI.
+- **Backend tahan banting**: health & system info, warmup model, auto-pull model default, pembatalan generation saat klien putus, timeout & error yang jelas.
 
 ## Prasyarat
 
@@ -48,6 +49,21 @@ python main.py
 
 Buka **http://127.0.0.1:8000**.
 
+## Setup cepat setelah reset RDP (Windows)
+
+Sekali jalan — venv + dependensi, install Ollama bila hilang, `ollama serve`, dan unduh model default:
+
+```powershell
+git clone https://github.com/Magnw27/ollama-chat.git
+cd ollama-chat
+powershell -ExecutionPolicy Bypass -File scripts\setup-windows.ps1
+powershell -ExecutionPolicy Bypass -File scripts\run-windows.ps1
+```
+
+Atau klik dua kali `start.bat`. Untuk membuka ke internet: `tunnel.bat` (Cloudflare Quick Tunnel; cloudflared diunduh otomatis ke `tools/`).
+
+Linux/macOS: `bash scripts/setup-linux.sh`, lalu `source .venv/bin/activate && python main.py`.
+
 ## Konfigurasi
 
 Semua lewat environment variable (opsional):
@@ -57,9 +73,14 @@ Semua lewat environment variable (opsional):
 | `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Alamat server Ollama |
 | `OLLAMA_DEFAULT_MODEL` | `gemma4:31b-cloud` | Model default; jika kosong dipakai model pertama |
 | `OLLAMA_TIMEOUT` | `600` | Timeout request ke Ollama (detik) |
+| `OLLAMA_KEEP_ALIVE` | `30m` | Lama model tetap dimuat di memori |
+| `OLLAMA_AUTO_PULL` | `0` | `1` = unduh model default otomatis saat start |
+| `OLLAMA_SYSTEM_PROMPT` | persona `mdripz-31b-win` | Prompt sistem; dikelola server, bukan UI |
 | `HOST` | `127.0.0.1` | Host server. Pakai `0.0.0.0` untuk akses dari HP di jaringan yang sama |
 | `PORT` | `8000` | Port server |
 | `ALLOWED_ORIGINS` | `*` | Daftar origin CORS dipisah koma |
+
+Semua variabel bisa juga ditaruh di file `.env` (lihat `.env.example`); environment yang sudah ada selalu menang.
 
 Contoh mengakses dari HP:
 
@@ -73,12 +94,18 @@ Lalu buka `http://<IP-komputer>:8000` dari HP (pastikan firewall mengizinkan por
 ## Struktur
 
 ```
-main.py                  # FastAPI: static, health, models, chat SSE
+main.py                  # FastAPI: static, health/system, models, chat SSE, warmup
 static/index.html        # shell aplikasi
 static/app.js            # React (Babel standalone)
 static/styles.css        # desain & responsif
 static/manifest.webmanifest
 static/icon.svg
+scripts/setup-windows.ps1  # bootstrap Windows/RDP
+scripts/run-windows.ps1    # jalankan server
+scripts/tunnel.ps1         # Cloudflare Quick Tunnel
+scripts/setup-linux.sh     # bootstrap Linux/macOS
+start.bat / tunnel.bat     # shortcut klik-dua-kali
+.env.example               # template konfigurasi
 requirements.txt
 ```
 
@@ -87,6 +114,8 @@ requirements.txt
 | Method | Endpoint | Keterangan |
 | --- | --- | --- |
 | `GET` | `/api/health` | Status Ollama & versi |
+| `GET` | `/api/system` | Info runtime (OS, Python, uptime, persona, config) |
+| `POST` | `/api/warmup` | Muat model ke memori lebih awal |
 | `GET` | `/api/models` | Daftar model terpasang |
 | `GET` | `/api/models/running` | Model yang sedang dimuat (`/api/ps`) |
 | `POST` | `/api/models/pull` | Unduh model (SSE progress) |
